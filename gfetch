@@ -1,0 +1,86 @@
+#!/bin/bash
+# This Sprict Was Converted in bash and it was forked
+
+# TODO:
+# fs usage
+# kernel
+
+storage() {
+    disks=$(ls -d /dev/sd* | uniq)
+    anydisk='false'
+    for i in $disks; do
+        if [ -f $i/data ]; then
+            full=$(ls -l $i/data)
+            disk=$(echo $full | awk -F '/' '{print $3}')
+            size=$(echo $full | awk '{print $6}')
+            echo "$disk: $(echo "$size / 1024 / 1024 / 1024" | bc)GB"
+            anydisk='true'
+        fi
+    done
+    if [ "$anydisk" != 'true' ]; then
+        echo "Running in the diskless"
+    fi
+}
+
+fs() {
+    if ls /srv/*.cmd &> /dev/null; then
+        ls /srv/*.cmd | sed 's/.cmd//g' | sed 's/\/srv\///g'
+    fi
+    if [ -f /srv/fscons ]; then
+        echo "fossil"
+    fi
+    v='false'
+    disks=$(ls -d /dev/sd* | uniq)
+    for i in $disks; do
+        if ls $i | grep -q arena; then
+            v='true'
+        fi
+    done
+    if [ "$v" = 'true' ]; then
+        echo "venti"
+    fi
+}
+
+cpuid() {
+    if [ -f /bin/aux/cpuid ]; then
+        /bin/aux/cpuid 2>/dev/null | grep procname | sed 's/.*procname//'
+    fi
+}
+
+os=$( \
+    if grep -q 'zrv' /dev/drivers; then
+        echo "9ants"
+    elif ! grep -q 'vmx' /dev/drivers; then
+        echo "9front"
+    else
+        echo "Bell Labs"
+    fi
+)
+
+# fs and storage require #S bound on /dev 
+bind -b '#S' /dev
+
+arch=$(echo $cputype)
+shell=/bin/rc
+uptime=$(uptime | sed 's/.*up//; s/..........$//')
+scr=$(dd count=1 < /dev/screen 2>&1)
+scr="${scr[4]} x ${scr[5]}"
+ram=$(tr / ' ' </dev/swap)
+free=$(echo "$ram" | awk '{print $1 / 1024 / 1024}')
+used=$(echo "(${ram[2]} * (${ram[6]} + ${ram[4]})) / 1024 / 1024" | bc)
+cpu=$(cpuid)
+files=$(fs)
+strg=$(storage)
+
+cat <<EOF
+             $USER@$HOSTNAME
+    (\(\     -----------
+   j\". ..    os: Plan 9 from $os/$arch
+   (  . .)   shell: $shell
+   |   ° ¡   uptime: $uptime
+   ¿     ;   ram: $used/$free MiB
+   c?\".UJ    cpu: $cputype $cpu
+             resolution: $scr
+             fs: $files
+             $strg
+EOF
